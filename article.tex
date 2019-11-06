@@ -1,10 +1,14 @@
-\documentclass[a4]{jarticle}
+\documentclass[a4]{article}
 %\usepackage{html,htmllist}
 %\usepackage{lgrind}
 %\usepackage[dvips]{graphicx,color}
 \usepackage[dvipdfmx]{graphicx,color}
 \usepackage{amsmath}
 \usepackage{amsthm}
+\usepackage{minted}
+\usemintedstyle{pastie}
+
+\newminted[sh]{sh}{fontfamily=tt,fontshape=\upshape,frame=lines,framesep=2mm}
 
 \topmargin=-2.0cm
 \textheight=25.0cm
@@ -13,17 +17,91 @@
 \evensidemargin=-1.0cm
 \renewcommand{\baselinestretch}{0.95}%ページ数が伸びたときにはここに
                                 %1.0以下の数字を入れてみましょう
-\title{研究相談資料}
+\title{Progress report}
 %\author{B4 鄭　中翔} %名前、学年を入れましょう
-\author{M2 石井 翔} %名前、学年を入れましょう
+\author{M2 Kakeru Ishii} %名前、学年を入れましょう
 
 \begin{document}
 \twocolumn{
 \maketitle
 }
 
+\section{Rewrote all code depending JOGL to depend LWJGL}
+
+Recently I had worked to make my renderer working in headless environment.
+To make it works, my renderer can't create OpenGL context in straight forward way.
+Basic linux OpenGL context is typically strongly bound to X window system.
+It may make it harder for my renderer to work in server environment like TSUBAME.
+
+My renderer should use EGL to create headless OpenGL context for this usage.
+I have used JOGL(OpenGL java wrapper) in my renderer code, but it was very hard to use EGL over this library.
+I switched base library JOGL to LWJGL.
+
+\section{Multi process experiment in TSUBAME}
+
+Most of multi process experiments in TSUBAME might use MPI or the other common parallel computing framework.
+My renderer need to be managed manually because I don't use these such kind of frameworks.
+
+
+As an introduction for TSUBAME job, I need to write batch script(Figure \ref{code: batch}) and execution code(Figure \ref{code: exec}).
+The generated file located in environment variable \$PE\_HOSTFILE includes hostnames of slave nodes.
+Then qrsh command perform a sort of ssh operation for slave nodes.
+
+\begin{figure*}
+    \begin{minted}[
+        frame=lines,
+        linenos
+    ]{sh}
+#!/bin/sh
+#$ -cwd
+# Node type and count for this job
+#$ -l s_gpu=2
+# Max time for this job
+#$ -l h_rt=00:30:00
+#$ -V
+
+for n in $(awk '{print $1}' $PE_HOSTFILE)
+do
+    qrsh -inherit $n /path/to/program &
+done
+wait    
+    \end{minted}
+    \caption{Batch job code for TSUBAME to invoke multi process program manually}
+    \label{code: batch}
+\end{figure*}
+
+\begin{figure*}
+    \begin{minted}[
+        frame=lines,
+        linenos
+    ]{sh}
+qsub -g <Group name in tsubame> task.sh
+    \end{minted}
+    \caption{Shell code to put batch job in TSUBAME}
+    \label{code: exec}
+\end{figure*}
+
+\section{Sync multiple server processes}
+
+I need to run 2 type of nodes on TSUBAME cluster. 
+Then I need to sync server processes because merge node should run after running content node.
+And each node should know all of host names they need to connect.
+
+I will make use of shared mounted file system for this. 
+Each node will write their hostname to specific file to notify their hostname to the other nodes.
+
+\begin{figure}[H]
+\begin{enumerate}
+    \item Create a file and write own hostname to shared directory
+    \item Wait all nodes to complete 1st step
+    \item Execute all of content nodes with arguments specified by node index
+    \item Wait all content node to be started
+    \item Execute all merge nodes
+\end{enumerate}
+\end{figure}
+
 %\bibliographystyle{acmsiggraph}
-\bibliographystyle{junsrt}
+\bibliographystyle{unsrt}
 \nocite{*}
 \small
 \bibliography{references} %参考文献データの入ったファイル名をここに書
